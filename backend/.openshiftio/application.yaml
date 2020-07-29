@@ -1,0 +1,361 @@
+objects:
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: weak-pencil
+    name: openjdk18-openshift
+  spec:
+    lookupPolicy:
+      local: false
+    tags:
+    - from:
+        kind: DockerImage
+        name: registry.access.redhat.com/redhat-openjdk-18/openjdk18-openshift
+      generation: null
+      importPolicy: {}
+      name: latest
+      referencePolicy:
+        type: ''
+  status:
+    dockerImageRepository: ''
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: weak-pencil
+    name: weak-pencil-backend
+  spec:
+    lookupPolicy:
+      local: false
+  status:
+    dockerImageRepository: ''
+- apiVersion: build.openshift.io/v1
+  kind: BuildConfig
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: weak-pencil
+    name: weak-pencil-backend
+  spec:
+    nodeSelector: null
+    output:
+      to:
+        kind: ImageStreamTag
+        name: weak-pencil-backend:latest
+    postCommit: {}
+    resources: {}
+    source:
+      git:
+        uri: ${SOURCE_REPOSITORY_URL}
+      type: Git
+      contextDir: backend
+    strategy:
+      sourceStrategy:
+        from:
+          kind: ImageStreamTag
+          name: openjdk18-openshift:latest
+        incremental: true
+        env:
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: weak-pencil-backend-database-bind
+              key: uri
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: weak-pencil-backend-database-bind
+              key: user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: weak-pencil-backend-database-bind
+              key: password
+      type: Source
+    triggers:
+    - type: GitHub
+      github:
+        secret: ${GITHUB_WEBHOOK_SECRET}
+    - type: ConfigChange
+    - type: ImageChange
+      imageChange: {}
+  status:
+    lastVersion: 0
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: weak-pencil
+    name: weak-pencil-backend
+  spec:
+    replicas: 1
+    selector:
+      app: weak-pencil
+      deploymentconfig: weak-pencil-backend
+    strategy:
+      resources: {}
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app: weak-pencil
+          deploymentconfig: weak-pencil-backend
+      spec:
+        containers:
+        - image: weak-pencil-backend:latest
+          name: weak-pencil-backend
+          ports:
+          - containerPort: 8778
+            protocol: TCP
+          - containerPort: 8080
+            protocol: TCP
+          - containerPort: 8443
+            protocol: TCP
+          resources:
+            limits:
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 120
+            timeoutSeconds: 3
+          env:
+          - name: DB_HOST
+            valueFrom:
+              secretKeyRef:
+                name: weak-pencil-backend-database-bind
+                key: uri
+          - name: DB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: weak-pencil-backend-database-bind
+                key: user
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: weak-pencil-backend-database-bind
+                key: password
+    test: false
+    triggers:
+    - type: ConfigChange
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - weak-pencil-backend
+        from:
+          kind: ImageStreamTag
+          name: weak-pencil-backend:latest
+      type: ImageChange
+  status:
+    availableReplicas: 0
+    latestVersion: 0
+    observedGeneration: 0
+    replicas: 0
+    unavailableReplicas: 0
+    updatedReplicas: 0
+- apiVersion: v1
+  kind: Service
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: weak-pencil
+    name: weak-pencil-backend
+  spec:
+    ports:
+    - name: 8080-tcp
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+    - name: 8443-tcp
+      port: 8443
+      protocol: TCP
+      targetPort: 8443
+    - name: 8778-tcp
+      port: 8778
+      protocol: TCP
+      targetPort: 8778
+    selector:
+      app: weak-pencil
+      deploymentconfig: weak-pencil-backend
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: weak-pencil-backend
+    labels:
+      app: weak-pencil
+  spec:
+    port:
+      targetPort: 8080-tcp
+    to:
+      kind: Service
+      name: weak-pencil-backend
+- kind: Secret
+  apiVersion: v1
+  metadata:
+    name: weak-pencil-backend-database-bind
+    labels:
+      app: weak-pencil
+  stringData:
+    uri: weak-pencil-backend-database
+    database: my_data
+    user: dbuser
+    password: secret
+- apiVersion: image.openshift.io/v1
+  generation: 0
+  image:
+    dockerImageLayers: null
+    dockerImageMetadata:
+      ContainerConfig: {}
+      Created: null
+      Id: ''
+      apiVersion: '1.0'
+      kind: DockerImage
+    dockerImageMetadataVersion: '1.0'
+    metadata:
+      creationTimestamp: null
+  kind: ImageStreamTag
+  lookupPolicy:
+    local: false
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: weak-pencil
+    name: weak-pencil-backend-database:latest
+  tag:
+    annotations: null
+    from:
+      kind: DockerImage
+      name: 172.30.1.1:5000/openshift/mysql:latest
+    generation: null
+    importPolicy: {}
+    name: latest
+    referencePolicy:
+      type: ''
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: weak-pencil
+    name: weak-pencil-backend-database
+  spec:
+    replicas: 1
+    selector:
+      app: weak-pencil
+      deploymentconfig: weak-pencil-backend-database
+    strategy:
+      resources: {}
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app: weak-pencil
+          deploymentconfig: weak-pencil-backend-database
+      spec:
+        containers:
+        - image: 172.30.1.1:5000/openshift/mysql:latest
+          name: weak-pencil-backend-database
+          ports:
+          - containerPort: 3306
+            protocol: TCP
+          resources:
+            limits:
+              cpu: '1'
+              memory: 512Mi
+          readinessProbe:
+            initialDelaySeconds: 5
+            exec:
+              command:
+              - /bin/sh
+              - -i
+              - -c
+              - MYSQL_PWD="$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u $MYSQL_USER -D $MYSQL_DATABASE
+                -e "SELECT 1"
+          livenessProbe:
+            initialDelaySeconds: 30
+            tcpSocket:
+              port: 3306
+          env:
+          - name: MYSQL_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: weak-pencil-backend-database-bind
+                key: database
+          - name: MYSQL_USER
+            valueFrom:
+              secretKeyRef:
+                name: weak-pencil-backend-database-bind
+                key: user
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: weak-pencil-backend-database-bind
+                key: password
+          - name: MYSQL_ROOT_PASSWORD
+            value: verysecretrootpassword
+    test: false
+    triggers:
+    - type: ConfigChange
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - weak-pencil-backend-database
+        from:
+          kind: ImageStreamTag
+          name: mysql:latest
+          namespace: openshift
+      type: ImageChange
+  status:
+    availableReplicas: 0
+    latestVersion: 0
+    observedGeneration: 0
+    replicas: 0
+    unavailableReplicas: 0
+    updatedReplicas: 0
+- apiVersion: v1
+  kind: Service
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: weak-pencil
+    name: weak-pencil-backend-database
+  spec:
+    ports:
+    - name: 3306-tcp
+      port: 3306
+      protocol: TCP
+      targetPort: 3306
+    selector:
+      app: weak-pencil
+      deploymentconfig: weak-pencil-backend-database
+  status:
+    loadBalancer: {}
+parameters:
+- name: SOURCE_REPOSITORY_URL
+  description: The source URL for the application
+  displayName: Source URL
+  value: https://github.com/dummy_org/dummy_repo
+  required: true
+- name: GITHUB_WEBHOOK_SECRET
+  description: The secret used to configure a GitHub webhook
+  displayName: GitHub Webhook Secret
+  required: true
+  from: '[a-zA-Z0-9]{40}'
+  generate: expression
+apiVersion: template.openshift.io/v1
+kind: Template
